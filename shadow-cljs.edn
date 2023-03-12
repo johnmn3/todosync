@@ -22,12 +22,14 @@
   {:target :browser
    :output-dir "public"
    :asset-path "/"
+   :js-options {:devtools {:enabled false}}
    :modules {:repl {:entries [todosync.core]
                     :web-worker true}}}
   :sw
   {:target :browser
    :output-dir "public"
    :asset-path "/"
+   :js-options {:devtools {:enabled false}}
    :release {:output-dir "build/public"}
    :modules {:sw {:entries [cljs-thread.sw]
                   :web-worker true}}}
@@ -36,7 +38,8 @@
    :output-dir "public" ; <- necessary because sw.js must be in root, but output-dir doesn't work per module
    :asset-path "/"
    :release {:output-dir "build/public"}
-   :js-options {:resolve {"highlight.js" {:target :npm :require "highlight.js/lib/core"}
+   :js-options {:devtools {:enabled false}
+                :resolve {"highlight.js" {:target :npm :require "highlight.js/lib/core"}
                           "lowlight" {:target :npm :require "lowlight/lib/core"}}}
    :modules
    {:shared {:entries []}

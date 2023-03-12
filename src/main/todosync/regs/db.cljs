@@ -60,7 +60,6 @@
 (def patch-atom (convergent/ref {}))
 
 (when (env/in-core?)
-  (println :in-core :launching :check-interval)
   (let [app-state (or (db-get ls-key) {})
         app-state-hash (hash app-state)]
     (post-app-state {:check-app-state-hash app-state-hash}))
@@ -86,7 +85,6 @@
                                :new-app-state-hash (str (hash app-state))
                                :old-app-state-hash
                                (let [oash (str (hash old-app-state))]
-                                 (println :oash oash)
                                  oash)})
               (db-set! patch-key (assoc current-patches new-patch-index new-patches))))
           (let [initial-diffs {0 (e/diff {} app-state)}]

@@ -66,7 +66,7 @@
         add-patches (e/diff app-state new-app-state)
         new-patch-index (-> old-patches keys sort last (or -1) inc)
         all-patches (merge old-patches {new-patch-index add-patches})]
-    (j/assoc! user :app-state (str all-patches))
+    (j/assoc! user :app-state (pr-str all-patches))
     (j/assoc! user :index new-patch-index)
     (auth/save-user user)
     (swap! hash-cache assoc (j/get user :user-id) new-app-state-hash)
@@ -101,7 +101,7 @@
                           (= %:user-index (dec %:client-index)))
   [{:keys [res user user-id new-app-state all-patches new-index
            old-app-state-hash new-app-state-hash]}]
-  (j/assoc! user :app-state (str all-patches))
+  (j/assoc! user :app-state (pr-str all-patches))
   (j/assoc! user :index new-index)
   (auth/save-user user)
   (swap! session-mem-db assoc user-id new-app-state)
@@ -185,7 +185,6 @@
 
 (defn handle-sync [req res & [next force?]]
   (if-let [app-state-check? (some-> req (aget "body") (aget "check-app-state-hash") str)]
-    ;; ()
     (if (-> req (j/get-in [:user :id]) (@hash-cache) (= app-state-check?))
       (.json res #js {:client-cmd "success"})
       (check-app-state-hash

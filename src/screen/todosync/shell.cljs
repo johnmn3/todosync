@@ -8,7 +8,8 @@
    [reitit.frontend.easy :as rfe]
    [todosync.routes :as routes]
    [todosync.views.todos.comps :as comps]
-   [reitit.core :as reitit]))
+   [reitit.core :as reitit]
+   [todosync.regs.db :as db]))
 
 ;; styles
 
@@ -135,32 +136,28 @@
   (let [open? @(subscribe [:drawer/open?])
         dark-theme? @(subscribe [:dark-theme?])
         router routes/router
-        current-route @(re-frame.core/subscribe [:current-route])
-        goal-chips @(subscribe [:welcome/goal-chips])]
+        current-route @(re-frame.core/subscribe [:current-route])]
     [c/box {:class [class-name (:root classes)]}
      [c/app-bar {:class [(:app-bar classes)]}
-      (->> goal-chips
-           (filter #(-> % second :outline))
-           (mapv (fn [_] [cc/icon-egg]))
-           (into [c/toolbar {:class (:toolbar classes)}
-                  [:div {:style {:width 7}}]
-                  [c/icon-button {:edge "start"
-                                  :color "inherit"
-                                  :aria-label "open drawer"
-                                  :on-click #(if open?
-                                               (dispatch [:drawer/close])
-                                               (dispatch [:drawer/open]))
-                                  :class [(:menu-button classes)]}
-                   [c/avatar
-                    [cc/add-circle-outline]]]
-                  [comps/todo-header-title
-                   (merge
-                    {:color "inherit"
-                     :class (:title classes)}
-                    (when dark-theme?
-                      {:style {:color "rgba(175, 47, 47, 0.25)"}}))
-                   "todos"]])
-           (#(into % [[account-menu]])))]
+      [c/toolbar {:class (:toolbar classes)}
+       [:div {:style {:width 7}}]
+       [c/icon-button {:edge "start"
+                       :color "inherit"
+                       :aria-label "open drawer"
+                       :on-click #(if open?
+                                    (dispatch [:drawer/close])
+                                    (dispatch [:drawer/open]))
+                       :class [(:menu-button classes)]}
+        [c/avatar
+         [cc/add-circle-outline]]]
+       [comps/todo-header-title
+        (merge
+         {:color "inherit"
+          :class (:title classes)}
+         (when dark-theme?
+           {:style {:color "rgba(175, 47, 47, 0.25)"}}))
+        "todosync"]
+       [account-menu]]]
 
 
      [c/drawer {:variant "permanent"
@@ -192,7 +189,7 @@
      [:main {:class (:content classes)
              :style {:height "100%"}
              :id "outer-main"}
-
+      [:input {:name "_csrf" :type "hidden" :default-value (db/get-csrf-token)}]
       [:div {:class (:app-bar-spacer classes)}]
       (when current-route
         [(-> current-route :data :view) {:classes classes}])]]))

@@ -13,10 +13,10 @@
         metosin/reitit              {:mvn/version "0.5.5"}
         day8/shadow-git-inject      {:mvn/version "0.0.5"}
         applied-science/js-interop  {:mvn/version "0.2.7"}
-        funcool/promesa             {:mvn/version "6.0.2"}
+        funcool/promesa             {:mvn/version "10.0.594"}
         net.clojars.john/dispacio   {;:mvn/version "0.1.0-alpha.4"
                                      :git/url "https://github.com/johnmn3/dispacio"
-                                     :sha "507179859a4401768a56930894b1ddfc59b665cf"}
+                                     :sha "0375a8f68371254f83c3e11b26993008ef13ceb7"}
         johnmn3/perc {:git/url "https://github.com/johnmn3/perc"
                       :sha "4b8689986af25c7adb5935006cae15d190b307ce"}
         johnmn3/af.fect             {:git/url "https://github.com/johnmn3/af.fect"
@@ -26,8 +26,8 @@
         BrianChevalier/radiant      {:git/url "https://github.com/johnmn3/radiant"
                                      :sha     "20e5dedd09275f27b2146a629a0b92078963db7b"}
         cljs-thread/cljs-thread     {:git/url "https://github.com/johnmn3/cljs-thread"
-                                     :sha     "77f7896f3f8a56cc95d6dcec77bf256779171465"}
-        ;; cljs-thread/cljs-thread {:local/root "../cljs-thread"}
+                                     :sha     "8eaad5da548a71674f11406d229326e71e4ab284"}
+       ;;  cljs-thread/cljs-thread {:local/root "../cljs-thread"}
         converge/converge {:git/url   "https://github.com/evidentsystems/converge"
                            :sha       "63a44e4f6e5fd8e2a32f6ba16c54cd8c47776495"
                            :deps/root "./converge"}

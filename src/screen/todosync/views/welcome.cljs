@@ -2,8 +2,6 @@
   (:require
    [reagent.core :as reagent]
    [comp.el :as c]
-   [comp.el.aux :as cc]
-   [cljs-thread.re-frame :refer [dispatch subscribe]]
    [todosync.footer :refer [copyright]]))
 
 (defn drawer-icon []
@@ -17,7 +15,7 @@
      :form   (str prefix "-form")
      :submit (str prefix "-submit")}))
 
-(defn custom-sign-in-styles [{:keys [theme]}]
+(defn custom-welcome-styles [{:keys [theme]}]
   (let [spacing            (:spacing theme)
         create-transitions (fn [& args]
                              (apply (-> theme :transitions :create)
@@ -34,10 +32,8 @@
 
 ;; Components
 
-(defn sign-in [{:keys [^js classes] :as props}]
-  (let [form (reagent/atom {:userid "" :password "" :remember? false})
-        errors (subscribe [:sign-in/errors])
-        goal-chips (subscribe [:welcome/goal-chips])]
+(defn welcome [{:keys [^js classes] :as props}]
+  (let [form (reagent/atom {:userid "" :password "" :remember? false})]
     (fn []
       [c/css-baseline]
       [:div {:class (:paper classes)
@@ -48,29 +44,13 @@
        [c/text {:component "h1"
                 :variant "h4"
                 :style {:padding-bottom 40}}
-        "Welcome to Todo Sync"]
-       [c/text {:component "h1"
-                :variant "h6"
-                :style {:padding-bottom 40}}
-        [:a {:href "/auth/sign-in"}
-         "Sign in"]
-        " to get started"]
-       (into [c/container]
-             (->> @goal-chips
-                  (mapv (fn [[k v]]
-                          [c/item {:xs true
-                                   :style {:padding 10 #_5}}
-                           [cc/chip
-                            (merge (dissoc v :outline)
-                                   (when-let [o (:outline v)]
-                                     {:variant "outlined"})
-                                   {:on-click
-                                    #(let [new-goal-chip (update v :outline not)]
-                                       (dispatch [:welcome/assoc-goal-chip new-goal-chip]))})]]))))])))
+        "Welcome to Todosync"]
+       [c/text
+        "This app syncronizes it's state between all your devices logged in"]])))
 
 (defn main [{:keys [^js classes]}]
   [c/grid-container {:component "main" :max-width "xs"}
    [c/css-baseline]
-   [(c/styled sign-in custom-sign-in-styles) classes]
+   [(c/styled welcome custom-welcome-styles) classes]
    [c/box {:mt 8}
     [copyright]]])
