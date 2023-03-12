@@ -1,0 +1,50 @@
+{:nrepl
+ {:port 8777}
+
+ :dev-http
+ {8280
+  {:root "public"
+   :push-state/headers {"content-type" "text/html; charset=utf-8"}}}
+                        ;; "Cross-Origin-Opener-Policy" "same-origin"
+                        ;; "Cross-Origin-Embedder-Policy" "credentialless" #_"require-corp"}}}
+
+ :deps {:aliases [:cljs]}
+ :build-defaults
+ {:build-hooks [(shadow-git-inject.core/hook)]}
+ 
+ :builds
+ {:server {:target :node-script
+           :output-to "devserver.js"
+           :main todosync.server/main!
+           :release {:output-to "build/server.js"}}
+
+  :repl ; <- just for getting a stable connection for repling, optional
+  {:target :browser
+   :output-dir "public"
+   :asset-path "/"
+   :modules {:repl {:entries [todosync.core]
+                    :web-worker true}}}
+  :sw
+  {:target :browser
+   :output-dir "public"
+   :asset-path "/"
+   :release {:output-dir "build/public"}
+   :modules {:sw {:entries [cljs-thread.sw]
+                  :web-worker true}}}
+  :core
+  {:target     :browser
+   :output-dir "public" ; <- necessary because sw.js must be in root, but output-dir doesn't work per module
+   :asset-path "/"
+   :release {:output-dir "build/public"}
+   :js-options {:resolve {"highlight.js" {:target :npm :require "highlight.js/lib/core"}
+                          "lowlight" {:target :npm :require "lowlight/lib/core"}}}
+   :modules
+   {:shared {:entries []}
+    :screen
+    {:init-fn todosync.screen/init!
+     :depends-on #{:shared}}
+    :core
+    {:init-fn todosync.core/init!
+     :depends-on #{:shared}
+     :web-worker true}}}}}
+

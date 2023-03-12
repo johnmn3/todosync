@@ -1,13 +1,14 @@
 node_modules
 .cpcache
 .shadow-cljs
-build
-logs
+build/*
+logs/*
 public/*
 !public/css/*
 !public/index.html
 !public/main.html
 .clj-kondo
 database.sqlite
+database.sqlite.journal
 devserver.js
 .lsp

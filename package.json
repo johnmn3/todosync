@@ -1,0 +1,53 @@
+{
+  "scripts": {
+    "watch": "npx shadow-cljs watch client",
+    "release": "npx shadow-cljs release client",
+    "build-report": "npx shadow-cljs run shadow.cljs.build-report client target/build-report.html"
+  },
+  "devDependencies": {
+    "karma": "6.3.7",
+    "karma-chrome-launcher": "3.1.0",
+    "karma-cljs-test": "0.1.0",
+    "karma-junit-reporter": "2.0.1",
+    "karma-phantomjs-launcher": "1.0.4",
+    "shadow-cljs": "2.21.0"
+  },
+  "dependencies": {
+    "@emotion/react": "11.9.0",
+    "@emotion/styled": "11.8.1",
+    "@keyv/sqlite": "2.1.0",
+    "@mui/material": "5.6.2",
+    "caller-id": "0.1.0",
+    "chokidar": "3.5.3",
+    "concurrently": "^6.3.0",
+    "cookie-parser": "1.4.6",
+    "core-js": "^3.6.5",
+    "create-react-class": "^15.6.3",
+    "csurf": "1.11.0",
+    "events": "^3.2.0",
+    "express": "4.18.2",
+    "express-session": "1.17.3",
+    "highlight.js": "11.1.0",
+    "html-to-text": "8.1.0",
+    "json-stringify-safe": "5.0.1",
+    "keyv": "4.5.2",
+    "morgan": "1.10.0",
+    "node-html-parser": "4.1.5",
+    "node-input-validator": "4.5.0",
+    "nodemailer": "6.9.1",
+    "passport": "0.5.2",
+    "passport-local": "1.0.0",
+    "process": "^0.11.10",
+    "react": "17.0.2",
+    "react-chartjs-2": "^4.3.1",
+    "react-dom": "17.0.2",
+    "react-transition-group": "^4.4.2",
+    "recharts": "^2.1.12",
+    "rotating-file-stream": "2.1.6",
+    "shadow-cljs": "^2.15.12",
+    "sitefox": "github:chr15m/sitefox",
+    "minimal-stylesheet": "^0.1.0",
+    "sqlite3": "5.1.4",
+    "tmp": "0.2.1"
+  }
+}
