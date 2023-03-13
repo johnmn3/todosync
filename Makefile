@@ -1,6 +1,6 @@
 STATIC=public/*.html public/*
 
-all: build build/server.js
+all: install build build/server.js
 
 build/server.js: src/**/* shadow-cljs.edn node_modules
 	npx shadow-cljs release server sw core
@@ -30,6 +30,7 @@ watch:
 
 install:
 	./install_clojure.sh
+	cd ..
 	export PATH="./clj/bin:$PATH"
 
 repl:
