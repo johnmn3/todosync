@@ -34,7 +34,8 @@
         converge/transit  {:git/url   "https://github.com/evidentsystems/converge"
                            :sha       "a532a9454eb5e2f8ac0294b341ded6c238ba0844"
                            :deps/root "./transit"}
-        com.cognitect/transit-cljs {:mvn/version "0.8.280"}}
+        com.cognitect/transit-cljs {:mvn/version "0.8.280"}
+        thheller/shadow-cljs {:mvn/version "2.21.0"}}
  :aliases
  {:cljs
   {:extra-deps {thheller/shadow-cljs {:mvn/version "2.21.0"}
