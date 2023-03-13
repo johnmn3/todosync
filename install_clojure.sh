@@ -1,3 +1,3 @@
-curl -O https://download.clojure.org/install/linux-install-1.11.1.1252.sh
+cd clj
 chmod +x linux-install-1.11.1.1252.sh
-sudo ./linux-install-1.11.1.1252.sh
+./linux-install-1.11.1.1252.sh ./
