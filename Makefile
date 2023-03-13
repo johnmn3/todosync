@@ -30,6 +30,7 @@ watch:
 
 install:
 	./install_clojure.sh
+	export PATH="./clj/bin:$PATH"
 
 repl:
 	npx shadow-cljs cljs-repl app
