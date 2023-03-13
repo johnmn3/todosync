@@ -15,7 +15,7 @@ node_modules: package.json
 	npm i
 	touch node_modules
 
-.PHONY: watch watcher server repl clean
+.PHONY: install watch watcher server repl clean
 
 server: node_modules
 	@echo "waiting for devserver.js to appear."
@@ -27,6 +27,9 @@ watcher:
 
 watch:
 	make -j2 watcher server
+
+install:
+	./install_clojure.sh
 
 repl:
 	npx shadow-cljs cljs-repl app
