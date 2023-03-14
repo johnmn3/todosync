@@ -62,7 +62,6 @@
 
 (defn init! []
   (when (e/in-screen?)
-    (println :set-db1 :in-screen-init)
     (idb-get db/ls-key
              (fn [res]
                (rf/dispatch [:set-db (:res res)])))

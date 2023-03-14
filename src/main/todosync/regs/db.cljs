@@ -2,7 +2,7 @@
   (:require
    [re-frame.core :as rf :refer [path after]]
    [cljs-thread.core :as thread]
-   [cljs-thread.env :as env :refer [in-core?]]
+   [cljs-thread.env :as env :refer [in-screen? in-core?]]
    [cljs-thread.re-frame :refer [reg-sub dispatch]]
    [cljs-thread.db :as db :refer [db-get db-set!]]
    [editscript.core :as e]
@@ -28,7 +28,7 @@
                                    :XSRF-Token (get-csrf-token)}
                      :body (js/JSON.stringify (clj->js data))})
       (.then #(.json %))
-      (.then #(let [client-cmd (aget % "client-cmd")] ;(println :result %)
+      (.then #(let [client-cmd (aget % "client-cmd")]
                 (when (= client-cmd "sync-back")
                   (let [all-patches (edn/read-string (aget % "sync-back"))
                         server-app-state (->> all-patches
@@ -43,7 +43,8 @@
                                          (filter (fn [[k _v]] (<= since k)))
                                          (into (sorted-map)))]
                     (post-app-state {:server-cmd :print
-                                     :patches (pr-str new-patches)})))))))
+                                     :patches (pr-str new-patches)})))))
+      (.catch #(println :todo :handle :error :e % "\n" :data data))))
 
 (def default-db
   {:showing :all
@@ -52,7 +53,7 @@
    :logged-in? false
    :todos (sorted-map)
    :dark-theme? false
-   :drawer-open? true})
+   :drawer-open? false})
 
 (def ls-key "local-store")
 
@@ -73,7 +74,6 @@
   [app-state]
   (reset! tmp-db-atom app-state)
   (when (and (env/in-core?) app-state)
-    (println :core-sending-app-state)
     (let [current-patches (db-get patch-key)
           old-app-state (or (db-get ls-key) {})]
       (if current-patches
@@ -106,13 +106,17 @@
                         ->local-store
                         (path :todos)])
 
-(when (in-core?)
+(when (or (in-screen?) (in-core?))
   (rf/reg-cofx
    :local-store
    (fn [cofx second-param]
-     (let [local-store (or (db-get ls-key) {})]
-       (-> cofx
-           (assoc :app-state (update local-store :todos #(into (sorted-map) %))))))))
+     (if (in-screen?)
+       (assoc cofx :app-state (update @tmp-db-atom :todos #(into (sorted-map) %)))
+       (let [app-state (db-get ls-key)]
+         (if-not app-state
+           cofx
+           (-> cofx
+               (assoc :app-state (update app-state :todos #(into (sorted-map) %))))))))))
 
 (reg-sub
  :db
@@ -136,7 +140,8 @@
  [(rf/inject-cofx :local-store)
   check-spec-interceptor]
  (fn [{:as cofx :keys [db app-state]} [_ all-patches server-app-state]]
-   (let [new-db (merge default-db (or server-app-state {}))]
+   (let [new-db (merge default-db db server-app-state)]
+     (reset! tmp-db-atom app-state)
      (db-set! patch-key all-patches)
      (app-state->local-store new-db)
      {:db new-db})))
@@ -147,7 +152,7 @@
  [(rf/inject-cofx :local-store)
   check-spec-interceptor]
  (fn [{:as cofx :keys [db app-state]} second-param]
-   (let [new-db (merge default-db (or app-state {}))]
+   (let [new-db (merge default-db db app-state)]
      (app-state->local-store new-db)
      {:db new-db})))
 

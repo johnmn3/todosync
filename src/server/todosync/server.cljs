@@ -13,6 +13,13 @@
    [sitefox.web :as web]
    [clojure.string :as str]))
 
+(defn try-read-string [s]
+  (try
+    (edn/read-string s)
+    (catch :default e
+      (println :error :read-string "\n" :e e "\n" :s s)
+      nil)))
+
 (defonce server (atom nil))
 
 ;; (def template (fs/readFileSync "public/index.html"))
@@ -25,7 +32,7 @@
    :logged-in? false
    :todos (sorted-map)
    :dark-theme? false
-   :drawer-open? true})
+   :drawer-open? false})
 
 (def session-mem-db
   (atom {}))
@@ -40,7 +47,7 @@
 
 (defp db-effect #%(= %:app-state :server-cmd)
   [ctx]
-  (println :db-effect :default :ctx ctx)
+  (println :db-effect :server-cmd :ctx ctx)
   (server-cmd ctx))
 
 (defp server-cmd #%(= %:server-cmd :print)
@@ -57,7 +64,7 @@
 (def hash-cache (atom {}))
 
 (defn update-app [user update-fn & args]
-  (let [old-patches (or (some-> user (j/get :app-state) edn/read-string)
+  (let [old-patches (or (some-> user (j/get :app-state) try-read-string)
                         {0 [[[] :r default-db]]})
         app-state (->> old-patches sort (map second) (map e/edits->script) (reduce e/patch {}))
         old-app-state-hash (str (hash app-state))
@@ -132,7 +139,7 @@
   (let [client-new-app-state-hash (j/get-in req [:body :new-app-state-hash])
         client-old-app-state-hash (j/get-in req [:body :old-app-state-hash])
         user-index (or (j/get user :index) 0)
-        old-patches (or (some-> user (j/get :app-state) edn/read-string)
+        old-patches (or (some-> user (j/get :app-state) try-read-string)
                         {0 [[[] :r default-db]]})
         app-state (->> old-patches sort (map second) (map e/edits->script) (reduce e/patch {}))
         old-app-state-hash (str (hash app-state))
@@ -173,11 +180,12 @@
 
 (defn check-app-state-hash
   [{:as ctx :keys [res user client-app-state-hash]}]
-  (let [current-patches (or (some-> user (j/get :app-state) edn/read-string)
+  (let [current-patches (or (some-> user (j/get :app-state) try-read-string)
                             {0 [[[] :r default-db]]})
         app-state (->> current-patches sort (map second) (map e/edits->script) (reduce e/patch {}))
-        current-app-state-hash (hash app-state)
+        current-app-state-hash (str (hash app-state))
         old-hashes-match? (= current-app-state-hash client-app-state-hash)]
+    (swap! hash-cache assoc (j/get user :user-id) current-app-state-hash)
     (if-not old-hashes-match?
       (.json res (clj->js {:client-cmd :sync-back
                            :sync-back (pr-str current-patches)}))
@@ -191,7 +199,7 @@
        {:res res
         :user (j/get req :user)
         :client-app-state-hash app-state-check?}))
-    (when-let [client-patches (some-> req (aget "body") (aget "patches") edn/read-string)]
+    (when-let [client-patches (some-> req (aget "body") (aget "patches") try-read-string)]
       (let [user (j/get req :user)
             user-id (j/get user :id)]
         (add-user-session-dispatcher user-id)
@@ -200,7 +208,7 @@
           :res res
           :user user
           :user-id user-id
-          :old-app-state-hash (some-> req (aget "body") (aget "old-app-state-hash") edn/read-string) 
+          :old-app-state-hash (some-> req (aget "body") (aget "old-app-state-hash") try-read-string) 
           :client-patches client-patches})))))
 
 (defn setup-routes [app]
@@ -224,8 +232,8 @@
                     (handle-sync req res next true)
                     (.set res "Access-Control-Allow-Origin" "*")
                     (.set res "Access-Control-Allow-Headers" "Content-Type,X-Requested-With")
-                    (.set res "Cross-Origin-Opener-Policy" "same-origin")
-                    (.set res "Cross-Origin-Embedder-Policy" "require-corp")
+                    ;; (.set res "Cross-Origin-Opener-Policy" "same-origin")
+                    ;; (.set res "Cross-Origin-Embedder-Policy" "require-corp")
                     (next))))))
       (web/static-folder "/" "public")))
 

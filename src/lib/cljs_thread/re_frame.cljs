@@ -66,7 +66,8 @@
       (ra/make-reaction
        #(if (contains? @state/subscriptions sub-v)
           (get @state/subscriptions sub-v alt)
-          (when-let [sub (re-frame/subscribe sub-v)]
-            @sub))
+          (if-let [sub (re-frame/subscribe sub-v)]
+            @sub
+            alt))
        :on-dispose
        #(in :core (dispose-sub [id sub-v]))))))
