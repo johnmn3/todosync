@@ -11,6 +11,6 @@
 (enable-console-print!)
 
 (defn init! []
-  (when (env/in-core?)
+  (when (or (env/in-screen?) (env/in-core?))
     (rf/dispatch-sync [:initialize-db])
     (rf/clear-subscription-cache!)))

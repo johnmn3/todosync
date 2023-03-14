@@ -91,7 +91,8 @@
    (let [filter-fn (case showing
                      :active (complement :done)
                      :done   :done
-                     :all    identity)]
+                     :all    identity
+                     identity)]
      (filter filter-fn todos))))
 
 (reg-sub

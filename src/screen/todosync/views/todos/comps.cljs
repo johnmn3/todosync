@@ -38,7 +38,8 @@
                                    [true true] "#4d4d4d"
                                    [true false] "#e6e6e6"
                                    [false true] "#f5f5f5"
-                                   [false false] "#4d4d4d")]
+                                   [false false] "#4d4d4d"
+                                   "#4d4d4d")]
                   (merge {:on-double-click #(reset! editing true)}
                          (if-not (:done todo)
                            {:style {:color font-color}}

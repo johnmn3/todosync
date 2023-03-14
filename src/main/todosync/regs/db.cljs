@@ -5,7 +5,6 @@
    [cljs-thread.env :as env :refer [in-core?]]
    [cljs-thread.re-frame :refer [reg-sub dispatch]]
    [cljs-thread.db :as db :refer [db-get db-set!]]
-   [converge.api :as convergent]
    [editscript.core :as e]
    [todosync.specs :as dts]
    [clojure.edn :as edn]))
@@ -57,43 +56,42 @@
 
 (def ls-key "local-store")
 
-(def patch-atom (convergent/ref {}))
-
 (when (env/in-core?)
   (let [app-state (or (db-get ls-key) {})
-        app-state-hash (hash app-state)]
+        app-state-hash (str (hash app-state))]
     (post-app-state {:check-app-state-hash app-state-hash}))
   (js/setInterval
    #(let [app-state (or (db-get ls-key) {})
-          app-state-hash (hash app-state)]
+          app-state-hash (str (hash app-state))]
       (post-app-state {:check-app-state-hash app-state-hash}))
    500))
+
+(def tmp-db-atom (atom nil))
 
 (defn app-state->local-store
   "Puts app-state into local forage"
   [app-state]
-  (let [pc (reset! patch-atom app-state)
-        patches (convergent/peek-patches patch-atom)]
-    (when app-state
-      (let [current-patches (db-get patch-key)
-            old-app-state (or (db-get ls-key) {})]
-        (if current-patches
-          (let [new-patch-index (-> current-patches keys sort last (or -1) inc)
-                new-patches (e/diff old-app-state app-state)]
-            (when-not (= "[]" (pr-str new-patches))
-              (post-app-state {:patches (pr-str {new-patch-index new-patches})
-                               :new-app-state-hash (str (hash app-state))
-                               :old-app-state-hash
-                               (let [oash (str (hash old-app-state))]
-                                 oash)})
-              (db-set! patch-key (assoc current-patches new-patch-index new-patches))))
-          (let [initial-diffs {0 (e/diff {} app-state)}]
-            (post-app-state {:patches (pr-str initial-diffs)
+  (reset! tmp-db-atom app-state)
+  (when (and (env/in-core?) app-state)
+    (println :core-sending-app-state)
+    (let [current-patches (db-get patch-key)
+          old-app-state (or (db-get ls-key) {})]
+      (if current-patches
+        (let [new-patch-index (-> current-patches keys sort last (or -1) inc)
+              new-patches (e/diff old-app-state app-state)]
+          (when-not (= "[]" (pr-str new-patches))
+            (post-app-state {:patches (pr-str {new-patch-index new-patches})
                              :new-app-state-hash (str (hash app-state))
-                             :old-app-state-hash (str (hash old-app-state))})
-            (db-set! patch-key initial-diffs))))
-      (db-set! ls-key app-state))
-    (convergent/pop-patches! patch-atom)
+                             :old-app-state-hash
+                             (let [oash (str (hash old-app-state))]
+                               oash)})
+            (db-set! patch-key (assoc current-patches new-patch-index new-patches))))
+        (let [initial-diffs {0 (e/diff {} app-state)}]
+          (post-app-state {:patches (pr-str initial-diffs)
+                           :new-app-state-hash (str (hash app-state))
+                           :old-app-state-hash (str (hash old-app-state))})
+          (db-set! patch-key initial-diffs))))
+    (db-set! ls-key app-state)
     app-state))
 
 (def ->local-store (rf/after app-state->local-store))
@@ -158,3 +156,12 @@
  app-state-interceptors
  (fn [app-state [stuff s2]]
    (update app-state :dark-theme? not)))
+
+(rf/reg-event-fx
+ :set-db
+ (fn [{:keys [db]} [_ new-app-state]]
+   (if-not new-app-state
+     {:db db}
+     (let [res-db (merge db new-app-state)]
+       (reset! tmp-db-atom new-app-state)
+       {:db res-db}))))

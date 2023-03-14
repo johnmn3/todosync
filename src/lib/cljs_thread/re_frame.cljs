@@ -8,16 +8,19 @@
    [cljs-thread.env :as env]))
 
 (def ^:export reg-sub
-  (if-not (env/in-core?)
-    identity
+  (if (env/in-core?)
+    (fn [& args]
+      (apply re-frame/reg-sub args))
     (fn [& args]
       (apply re-frame/reg-sub args))))
 
 (defn ^:export dispatch
-  [event]
+  [event & [screen-only?]]
   (if (env/in-core?)
-    (re-frame/dispatch event)
-    (in :core (re-frame.core/dispatch event))))
+    (do (when-not screen-only? (re-frame/dispatch event))
+        (in :screen (re-frame/dispatch event)))
+    (do (re-frame/dispatch event)
+        (when-not screen-only? (in :core (re-frame/dispatch event))))))
 
 (defonce ^:export trackers
   (atom {}))
@@ -57,10 +60,13 @@
 (defn ^:export subscribe
   [sub-v & [alt]]
   (if (env/in-core?)
-      (re-frame/subscribe sub-v)
+    (re-frame/subscribe sub-v)
     (let [id (str (random-uuid))]
-        (in :core (add-sub [id sub-v]))
+      (in :core (add-sub [id sub-v]))
       (ra/make-reaction
-       #(get @state/subscriptions sub-v alt)
+       #(if (contains? @state/subscriptions sub-v)
+          (get @state/subscriptions sub-v alt)
+          (when-let [sub (re-frame/subscribe sub-v)]
+            @sub))
        :on-dispose
        #(in :core (dispose-sub [id sub-v]))))))

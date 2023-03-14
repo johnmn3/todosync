@@ -1,6 +1,6 @@
 STATIC=public/*.html public/*
 
-all: install build build/server.js
+all: build build/server.js
 
 build/server.js: src/**/* shadow-cljs.edn node_modules
 	npx shadow-cljs release server sw core

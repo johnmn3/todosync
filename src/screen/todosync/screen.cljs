@@ -3,26 +3,32 @@
    [reagent.dom :as rdom]
    [comp.el :as c]
    [cljs-thread.core :as thread]
-   [cljs-thread.re-frame :refer [subscribe]]
+   [cljs-thread.re-frame :refer [dispatch subscribe]]
+   [cljs-thread.idb :as idb :refer [idb-get]]
    [todosync.routes :as routes]
-   [todosync.shell :as shell]))
+   [todosync.shell :as shell]
+   [todosync.regs.db :as db]
+   [todosync.regs.todo]
+   [todosync.regs.shell]
+   [re-frame.core :as rf]
+   [cljs-thread.env :as e]))
 
 ;;; Config
 (enable-console-print!)
 ; for docs release
-#_
-(thread/init!
- {:sw-connect-string "/cljs-thread/sw.js"
-  :repl-connect-string "/cljs-thread/repl.js"
-  :core-connect-string "/cljs-thread/core.js"})
+(when (e/in-screen?)
+  #_(thread/init!
+     {:sw-connect-string "/cljs-thread/sw.js"
+      :repl-connect-string "/cljs-thread/repl.js"
+      :core-connect-string "/cljs-thread/core.js"})
 
-;; #_
-(thread/init!
- {:sw-connect-string "/sw.js"
-  :repl-connect-string "/repl.js"
-  :core-connect-string "/core.js"
-  :future-count 2
-  :injest-count 0})
+  ;; #_
+  (thread/init!
+   {:sw-connect-string "/sw.js"
+    :repl-connect-string "/repl.js"
+    :core-connect-string "/core.js"
+    :future-count 2
+    :injest-count 0}))
 
 (def debug?
   ^boolean goog.DEBUG)
@@ -55,5 +61,13 @@
                (.getElementById js/document "app")))
 
 (defn init! []
-  (dev-setup)
-  (mount-root))
+  (when (e/in-screen?)
+    (println :set-db1 :in-screen-init)
+    (idb-get db/ls-key
+             (fn [res]
+               (rf/dispatch [:set-db (:res res)])))
+    (dispatch [:initialize-db] true)
+    (rf/clear-subscription-cache!)
+
+    (dev-setup)
+    (mount-root)))
