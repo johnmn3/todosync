@@ -65,7 +65,7 @@
     (idb-get db/ls-key
              (fn [res]
                (rf/dispatch [:set-db (:res res)])))
-    (dispatch [:initialize-db] true)
+    (rf/dispatch-sync [:initialize-db])
     (rf/clear-subscription-cache!)
 
     (dev-setup)

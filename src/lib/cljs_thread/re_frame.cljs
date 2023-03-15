@@ -15,12 +15,11 @@
       (apply re-frame/reg-sub args))))
 
 (defn ^:export dispatch
-  [event & [screen-only?]]
+  [event]
   (if (env/in-core?)
-    (do (when-not screen-only? (re-frame/dispatch event))
-        (in :screen (re-frame/dispatch event)))
-    (do (re-frame/dispatch event)
-        (when-not screen-only? (in :core (re-frame/dispatch event))))))
+    (re-frame/dispatch event)
+    (do (in :core (re-frame/dispatch event))
+        (re-frame/dispatch event))))
 
 (defonce ^:export trackers
   (atom {}))
@@ -32,7 +31,7 @@
     (let [new-sub (re-frame/subscribe sub-v)]
       {:tracker (r/track!
                  #(let [sub @new-sub]
-                    @(in :screen (swap! state/subscriptions assoc sub-v sub)))
+                    @(in id (swap! state/subscriptions assoc sub-v sub)))
                  [])
        :subscribers #{id}})))
 
@@ -49,7 +48,7 @@
         (assoc ts sub-v {:tracker tracker :subscribers new-subscribers})
         (do
           (r/dispose! tracker)
-          @(in :screen (swap! state/subscriptions dissoc sub-v))
+          @(in id (swap! state/subscriptions dissoc sub-v))
           (dissoc ts sub-v))))
     ts))
 
@@ -61,7 +60,7 @@
   [sub-v & [alt]]
   (if (env/in-core?)
     (re-frame/subscribe sub-v)
-    (let [id (str (random-uuid))]
+    (let [id (:id env/data)]
       (in :core (add-sub [id sub-v]))
       (ra/make-reaction
        #(if (contains? @state/subscriptions sub-v)

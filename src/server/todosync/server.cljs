@@ -65,19 +65,21 @@
 
 (defn update-app [user update-fn & args]
   (let [old-patches (or (some-> user (j/get :app-state) try-read-string)
-                        {0 [[[] :r default-db]]})
-        app-state (->> old-patches sort (map second) (map e/edits->script) (reduce e/patch {}))
+                        {0 {:patches [[[] :r default-db]]
+                            :hash (str (hash default-db))}})
+        app-state (->> old-patches sort (map second) (map :patches) (map e/edits->script) (reduce e/patch {}))
         old-app-state-hash (str (hash app-state))
         new-app-state (apply update app-state update-fn args)
         new-app-state-hash (str (hash new-app-state))
         add-patches (e/diff app-state new-app-state)
         new-patch-index (-> old-patches keys sort last (or -1) inc)
-        all-patches (merge old-patches {new-patch-index add-patches})]
+        all-patches (merge old-patches {new-patch-index {:patches add-patches
+                                                         :hash new-app-state-hash}})]
     (j/assoc! user :app-state (pr-str all-patches))
     (j/assoc! user :index new-patch-index)
     (auth/save-user user)
     (swap! hash-cache assoc (j/get user :user-id) new-app-state-hash)
-    (swap! session-mem-db assoc (j/get user :id) new-app-state)))
+    (swap! session-mem-db update (j/get user :id) #(do (reset! % new-app-state) %))))
 
 (defp db-effect #%(-> %:app-state :user-id not)
   [{:keys [user-id app-state]}]
@@ -87,15 +89,16 @@
 
 (defn add-user-session-dispatcher [user-id]
   (when-not (get @session-mem-db user-id)
-    (swap! session-mem-db assoc user-id {})
-    (add-watch
-     session-mem-db
-     user-id
-     (fn [key atom old-state new-state]
-       (let [old-app-state (get old-state user-id)
-             new-app-state (get new-state user-id)]
-         (when-not (= [] (e/diff old-app-state new-app-state))
-           (db-effect {:user-id user-id :app-state new-app-state})))))))
+    (let [user-session-atom (atom {})]
+      (swap! session-mem-db assoc user-id user-session-atom)
+      (add-watch
+       user-session-atom
+       user-id
+       (fn [key atom old-state new-state]
+         (let [old-app-state old-state #_(get old-state user-id)
+               new-app-state new-state #_(get new-state user-id)]
+           (when-not (= [] (e/diff old-app-state new-app-state))
+             (db-effect {:user-id user-id :app-state new-app-state}))))))))
 
 (defp handle-client #% %:res
   [{:keys [res user-index client-index new-index]}]
@@ -108,10 +111,11 @@
                           (= %:user-index (dec %:client-index)))
   [{:keys [res user user-id new-app-state all-patches new-index
            old-app-state-hash new-app-state-hash]}]
+  ;; (println :handle-client :updating-app-state)
   (j/assoc! user :app-state (pr-str all-patches))
   (j/assoc! user :index new-index)
   (auth/save-user user)
-  (swap! session-mem-db assoc user-id new-app-state)
+  (swap! session-mem-db update user-id #(do (reset! % new-app-state) %))
   (swap! hash-cache assoc user-id new-app-state-hash)
   (.json res (clj->js {:status 400
                        :client-cmd :success
@@ -119,6 +123,10 @@
 
 (defp handle-client #%(< %:client-index %:user-index)
   [{:keys [res user-index client-index old-patches]}]
+  #_
+  (println :handl-client
+           :client-index client-index
+           :less-than-user-index user-index)
   (.json res (clj->js {:status 400
                        :client-cmd :sync-back
                        :client-index client-index
@@ -140,8 +148,9 @@
         client-old-app-state-hash (j/get-in req [:body :old-app-state-hash])
         user-index (or (j/get user :index) 0)
         old-patches (or (some-> user (j/get :app-state) try-read-string)
-                        {0 [[[] :r default-db]]})
-        app-state (->> old-patches sort (map second) (map e/edits->script) (reduce e/patch {}))
+                        {0 {:patches [[[] :r default-db]]
+                            :hash (str (hash default-db))}})
+        app-state (->> old-patches sort (map second) (map :patches) (map e/edits->script) (reduce e/patch {}))
         old-app-state-hash (str (hash app-state))
         old-hashes-match? (= old-app-state-hash client-old-app-state-hash)
         all-patches (merge old-patches client-patches)
@@ -150,6 +159,7 @@
                          (filter #(-> % first (> user-index)))
                          sort
                          (map second)
+                         (map :patches)
                          (filter (complement #{[]})))]
     (if-not old-hashes-match?
       (.json res (clj->js {:status 400
@@ -179,37 +189,58 @@
                          :new-index (-> all-patches keys sort last)}))))))))
 
 (defn check-app-state-hash
-  [{:as ctx :keys [res user client-app-state-hash]}]
+  [{:as ctx :keys [res user client-patch-index client-app-state-hash]}]
   (let [current-patches (or (some-> user (j/get :app-state) try-read-string)
-                            {0 [[[] :r default-db]]})
-        app-state (->> current-patches sort (map second) (map e/edits->script) (reduce e/patch {}))
-        current-app-state-hash (str (hash app-state))
+                            {0 {:patches [[[] :r default-db]]
+                                :hash (str (hash default-db))}})
+        app-state (->> current-patches sort (map second) (map :patches) (map e/edits->script) (reduce e/patch {}))
+        last-patch (-> current-patches sort last second)
+        current-app-state-hash (:hash last-patch)
+        last-index (:patch-index last-patch)
+        client-behind? (< client-patch-index last-index)
         old-hashes-match? (= current-app-state-hash client-app-state-hash)]
-    (swap! hash-cache assoc (j/get user :user-id) current-app-state-hash)
+    #_
+    (println :check-app-state-hash :client-behind? client-behind? :last-index last-index :client-patch-index client-patch-index :last-patch last-patch)
+    (swap! hash-cache assoc (j/get user :id) current-app-state-hash)
     (if-not old-hashes-match?
-      (.json res (clj->js {:client-cmd :sync-back
-                           :sync-back (pr-str current-patches)}))
+      (.json res
+             (clj->js
+              (merge
+               {:client-cmd :sync-back
+                :last-index last-index
+                :sync-back (pr-str current-patches)}
+               (when client-behind?
+                 (let [catch-up-patches (->> current-patches
+                                             (filter #(-> % key (> client-patch-index)))
+                                             (into {}))]
+                   {:catch-up (pr-str catch-up-patches)})))))
       (.json res (clj->js {:client-cmd :success})))))
 
 (defn handle-sync [req res & [next force?]]
-  (if-let [app-state-check? (some-> req (aget "body") (aget "check-app-state-hash") str)]
-    (if (-> req (j/get-in [:user :id]) (@hash-cache) (= app-state-check?))
-      (.json res #js {:client-cmd "success"})
-      (check-app-state-hash
-       {:res res
-        :user (j/get req :user)
-        :client-app-state-hash app-state-check?}))
-    (when-let [client-patches (some-> req (aget "body") (aget "patches") try-read-string)]
-      (let [user (j/get req :user)
-            user-id (j/get user :id)]
-        (add-user-session-dispatcher user-id)
-        (update-app-state-when-new
-         {:req req
-          :res res
-          :user user
-          :user-id user-id
-          :old-app-state-hash (some-> req (aget "body") (aget "old-app-state-hash") try-read-string) 
-          :client-patches client-patches})))))
+  (let [body (aget req "body")]
+    (if-let [app-state-check? (some-> body (aget "check-app-state-hash") str)]
+      (if (-> req (j/get-in [:user :id]) (@hash-cache) (= app-state-check?))
+        (.json res #js {:client-cmd "success"})
+        (check-app-state-hash
+         {:res res
+          :user (j/get req :user)
+          :client-patch-index (aget body "patch-index")
+          :client-app-state-hash app-state-check?}))
+      (when-let [client-patches (some-> body (aget "patches") try-read-string)]
+        (let [user (j/get req :user)
+              user-id (j/get user :id)
+              patch-index (some-> body (aget "patch-index"))]
+          #_
+          (println :handling-patches :index patch-index)
+          (add-user-session-dispatcher user-id)
+          (update-app-state-when-new
+           {:req req
+            :res res
+            :user user
+            :user-id user-id
+            :client-patch-index patch-index
+            :old-app-state-hash (some-> req (aget "body") (aget "old-app-state-hash") try-read-string)
+            :client-patches client-patches}))))))
 
 (defn setup-routes [app]
   (web/reset-routes app)

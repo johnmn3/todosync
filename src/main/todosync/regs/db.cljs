@@ -1,7 +1,7 @@
 (ns todosync.regs.db
   (:require
    [re-frame.core :as rf :refer [path after]]
-   [cljs-thread.core :as thread]
+   [cljs-thread.core :as thread :refer [in]]
    [cljs-thread.env :as env :refer [in-screen? in-core?]]
    [cljs-thread.re-frame :refer [reg-sub dispatch]]
    [cljs-thread.db :as db :refer [db-get db-set!]]
@@ -12,8 +12,9 @@
 (defn get-csrf-token []
     (let [cookies (str (if (and (exists? js/document) (thread/in? :screen))
                          (aget js/document "cookie")
-                         @(thread/in :screen (aget js/document "cookie"))))]
-      (second (re-find (js/RegExp. "XSRF-TOKEN=(.*)") cookies))))
+                         @(thread/in :screen (aget js/document "cookie"))))
+          token (second (re-find (js/RegExp. "XSRF-TOKEN=(.*)") cookies))]
+      token))
 
 (def csrf-token (get-csrf-token))
 
@@ -21,30 +22,43 @@
 
 (declare app-state->local-store)
 
+(def hash-check-limiter (atom nil))
+
 (defn post-app-state [data]
-  (-> (js/fetch "/sync/app-state"
-                #js {:method "POST"
-                     :headers #js {:Content-Type "application/json"
-                                   :XSRF-Token (get-csrf-token)}
-                     :body (js/JSON.stringify (clj->js data))})
-      (.then #(.json %))
-      (.then #(let [client-cmd (aget % "client-cmd")]
-                (when (= client-cmd "sync-back")
-                  (let [all-patches (edn/read-string (aget % "sync-back"))
-                        server-app-state (->> all-patches
-                                              sort
-                                              (map second)
-                                              (map e/edits->script)
-                                              (reduce e/patch {}))]
-                    (dispatch [:reset-db all-patches server-app-state])))
-                (when-let [since (aget % "sync-since")]
-                  (let [current-patches (db-get patch-key)
-                        new-patches (->> current-patches
-                                         (filter (fn [[k _v]] (<= since k)))
-                                         (into (sorted-map)))]
-                    (post-app-state {:server-cmd :print
-                                     :patches (pr-str new-patches)})))))
-      (.catch #(println :todo :handle :error :e % "\n" :data data))))
+  (let [token (get-csrf-token)]
+    (if-not token
+      (js/setTimeout #(post-app-state data) 1000)
+      (-> (js/fetch "/sync/app-state"
+                    #js {:method "POST"
+                         :headers #js {:Content-Type "application/json"
+                                       :XSRF-Token token}
+                         :body (js/JSON.stringify (clj->js data))})
+          (.then #(.json %))
+          (.then #(let [client-cmd (aget % "client-cmd")]
+                    (reset! hash-check-limiter nil)
+                    (when (= client-cmd "sync-back")
+                      (let [all-patches (edn/read-string (aget % "sync-back"))
+                            last-index (aget % "last-index")
+                            catch-up (aget % "catch-up")
+                            server-app-state (->> all-patches
+                                                  sort
+                                                  (map second)
+                                                  (map :patches)
+                                                  (map e/edits->script)
+                                                  (reduce e/patch {}))]
+                        (reset! hash-check-limiter nil)
+                        (if-not catch-up
+                          (do (rf/dispatch [:reset-db all-patches server-app-state])
+                              (in :screen (rf/dispatch [:set-db server-app-state])))
+                          (rf/dispatch [:catch-up-db (edn/read-string catch-up)]))))
+                    (when-let [since (aget % "sync-since")]
+                      (let [current-patches (db-get patch-key)
+                            new-patches (->> current-patches
+                                             (filter (fn [[k _v]] (<= since k)))
+                                             (into (sorted-map)))]
+                        (post-app-state {:server-cmd :print
+                                         :patches (pr-str new-patches)})))))
+          (.catch #(reset! hash-check-limiter nil))))))
 
 (def default-db
   {:showing :all
@@ -58,13 +72,20 @@
 (def ls-key "local-store")
 
 (when (env/in-core?)
-  (let [app-state (or (db-get ls-key) {})
-        app-state-hash (str (hash app-state))]
-    (post-app-state {:check-app-state-hash app-state-hash}))
   (js/setInterval
-   #(let [app-state (or (db-get ls-key) {})
-          app-state-hash (str (hash app-state))]
-      (post-app-state {:check-app-state-hash app-state-hash}))
+   #(when-not @hash-check-limiter
+      (let [current-patches (db-get patch-key)
+            index (-> current-patches keys sort last)
+            last-patch (get current-patches index)
+            last-patch-index (:patch-index last-patch)
+            app-state-hash (:hash last-patch)]
+        #_
+        (println :sending-sync-check
+                 :app-state-index index
+                 :last-patch-index (:patch-index last-patch))
+        (reset! hash-check-limiter app-state-hash)
+        (post-app-state {:check-app-state-hash app-state-hash
+                         :patch-index last-patch-index})))
    500))
 
 (def tmp-db-atom (atom nil))
@@ -75,23 +96,34 @@
   (reset! tmp-db-atom app-state)
   (when (and (env/in-core?) app-state)
     (let [current-patches (db-get patch-key)
-          old-app-state (or (db-get ls-key) {})]
+          old-app-state (or (db-get ls-key) {})
+          new-app-state-hash (str (hash app-state))
+          old-app-state-hash (str (hash old-app-state))]
+      (db-set! ls-key app-state)
       (if current-patches
         (let [new-patch-index (-> current-patches keys sort last (or -1) inc)
-              new-patches (e/diff old-app-state app-state)]
+              new-patches (e/diff old-app-state app-state)
+              patch {:patches new-patches
+                     :patch-index new-patch-index
+                     :hash new-app-state-hash}]
           (when-not (= "[]" (pr-str new-patches))
-            (post-app-state {:patches (pr-str {new-patch-index new-patches})
-                             :new-app-state-hash (str (hash app-state))
-                             :old-app-state-hash
-                             (let [oash (str (hash old-app-state))]
-                               oash)})
-            (db-set! patch-key (assoc current-patches new-patch-index new-patches))))
-        (let [initial-diffs {0 (e/diff {} app-state)}]
+            (in :screen (rf/dispatch [:set-db app-state]))
+            #_
+            (println :posting-new-patches :index new-patch-index :patches new-patches)
+            (post-app-state {:patches (pr-str {new-patch-index patch})
+                             :patch-index new-patch-index
+                             :new-app-state-hash new-app-state-hash
+                             :old-app-state-hash old-app-state-hash})
+            (db-set! patch-key (assoc current-patches new-patch-index patch))))
+        (let [initial-diffs {0 (e/diff {} app-state)}
+              initial-patches {0 {:patches initial-diffs
+                                  :patch-index 0
+                                  :hash (str (hash app-state))}}]
           (post-app-state {:patches (pr-str initial-diffs)
-                           :new-app-state-hash (str (hash app-state))
-                           :old-app-state-hash (str (hash old-app-state))})
-          (db-set! patch-key initial-diffs))))
-    (db-set! ls-key app-state)
+                           :patch-index 0
+                           :new-app-state-hash new-app-state-hash
+                           :old-app-state-hash old-app-state-hash})
+          (db-set! patch-key initial-patches))))
     app-state))
 
 (def ->local-store (rf/after app-state->local-store))
@@ -111,7 +143,7 @@
    :local-store
    (fn [cofx second-param]
      (if (in-screen?)
-       (assoc cofx :app-state (update @tmp-db-atom :todos #(into (sorted-map) %)))
+       cofx
        (let [app-state (db-get ls-key)]
          (if-not app-state
            cofx
@@ -141,9 +173,32 @@
   check-spec-interceptor]
  (fn [{:as cofx :keys [db app-state]} [_ all-patches server-app-state]]
    (let [new-db (merge default-db db server-app-state)]
+     (reset! hash-check-limiter nil)
      (reset! tmp-db-atom app-state)
      (db-set! patch-key all-patches)
-     (app-state->local-store new-db)
+     (db-set! ls-key new-db)
+     {:db new-db})))
+
+(rf/reg-event-fx
+ :catch-up-db
+ [(rf/inject-cofx :local-store)
+  check-spec-interceptor]
+ (fn [{:as cofx :keys [db app-state]} [_ catch-up-patches]]
+   (let [current-patches (db-get patch-key)
+         new-patches (merge current-patches catch-up-patches)
+         new-app-state (->> new-patches
+                            sort
+                            (map second)
+                            (map :patches)
+                            (map e/edits->script)
+                            (reduce e/patch {}))
+         new-db (merge default-db db new-app-state)]
+     #_
+     (println :catch-up-db :in (:id env/data))
+     (reset! tmp-db-atom new-db)
+     (db-set! patch-key new-patches)
+     (db-set! ls-key new-db)
+     (in :screen (rf/dispatch [:set-db new-db]))
      {:db new-db})))
 
 
